@@ -30,7 +30,7 @@ async function main() {
 
     // open the search page
     await page.goto(
-        `https://twitter.com/search?q=${config.searchQuery}&src=recent_search_click`
+        `https://twitter.com/search?q=${config.searchQuery}&src=recent_search_click&f=live`
     );
     await page.waitForNetworkIdle();
 
@@ -48,7 +48,7 @@ async function main() {
                             let newProfileLinks: string[] = [];
                             let profilePageLinkRegEx = /^\/[0-9A-Za-z]+$/;
                             let allElementsWithLinks =
-                                document.querySelectorAll("a[role='link']");
+                                document.querySelectorAll("div[data-testid='primaryColumn'] a[role='link']");
                             allElementsWithLinks.forEach((elem, index) => {
                                 let profileLink = elem.getAttribute("href");
                                 if (profileLink?.match(profilePageLinkRegEx)) {
@@ -82,8 +82,8 @@ async function main() {
     };
     let visitedUrls: Set<string> = new Set();
     for await (let profileLinks of asycPageIteratorObj) {
-        console.log(profileLinks);
         let profileLinksSet: Set<string> = new Set(profileLinks);
+        console.log(profileLinksSet)
         innerloop: for (let link of profileLinksSet) {
             // Continue the loop is the url is already visited in the current run
             if(visitedUrls.has(link)){
@@ -133,9 +133,25 @@ async function main() {
                 );
                 await sendBtn?.click();
                 console.log("Message sent");
-                msgPage.waitForNetworkIdle().then(() => {
-                    msgPage.close();
-                    profilePage.close();
+                msgPage.waitForNetworkIdle().then(async () => {
+                    /* 
+                    Check for the rate limitation message, and only proceed further if the rate limitation
+                    is not reached otherwise pause the script for 15 minutes
+                    */
+                   try{
+                    let errMsgElem = await msgPage.waitForSelector(`div[data-testid='DmScrollerContainer'] >>> span ::-p-text(Message failed to send)`,{
+                        timeout: 2000
+                    });
+                    await new Promise((resolve) => {
+                        console.log("Script paused for 15 minutes")
+                        setTimeout(() => resolve(true), 1000 * 15 * 60);
+                    })
+                   }catch(err){
+
+                   }finally{
+                    await msgPage.close();
+                    await profilePage.close();
+                   }
                 });
             } catch (error) {
                 await profilePage.close();
